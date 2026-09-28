@@ -14,27 +14,28 @@ A lightweight in-memory caching server built with TypeScript and Node.js.
 - Automatic expired-entry cleanup
 
 ## Installation
+```sh
 git clone https://github.com/frankZZzzzzzzzz/Cachea.git  
 cd Cachea  
 npm install  
-
+```
 # Usage
 
 ## Configure the server with environment variables:
-
+```sh
 CACHEA_SERVER_PORT=3002  
 CLEANUP_INTERVAL=60000
-
+```
 ## Build and run:
-
+```sh
 npx tsc  
 node src/CacheaServer/CacheaServer.js
-
+```
 # Commands
 
 ##  Cachea currently supports:
 
-| Command | Input | Description |
+| Command | Input | Output | Description |
 |---------|-------|--------|-------------|
 | `PING` | None | `PONG` | Checks if the server is running |
 | `SET` | Key, Value | `SUCCESS` / `FAILURE` | Stores a value in the cache |
