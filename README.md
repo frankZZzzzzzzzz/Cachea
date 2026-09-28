@@ -29,7 +29,7 @@ CLEANUP_INTERVAL=60000
 ## Build and run:
 ```sh
 npx tsc  
-node src/CacheaServer/CacheaServer.js
+node dist/CacheaServer/CacheaRunner.js
 ```
 # Commands
 

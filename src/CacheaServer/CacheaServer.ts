@@ -3,10 +3,7 @@ import { Buffer } from "node:buffer"
 import net from "node:net";
 import dotenv from "dotenv"
 
-
 import { CacheaStorage } from "./CacheaStorage.js"
-
-dotenv.config();
 
 const CACHEA_SERVER_PORT = Number(process.env.CACHEA_SERVER_PORT) || 3002;
 
