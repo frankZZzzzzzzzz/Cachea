@@ -34,9 +34,10 @@ node src/CacheaServer/CacheaServer.js
 
 ##  Cachea currently supports:
 
-Command	     Description  
-PING	     Check server connection  
-SET	         Store a value  
-GET	         Retrieve a value  
-SETEXPIRE	 Set a key expiration  
-SHUTDOWN	 Stop the server  
+| Command | Input | Description |
+|---------|-------|--------|-------------|
+| `PING` | None | `PONG` | Checks if the server is running |
+| `SET` | Key, Value | `SUCCESS` / `FAILURE` | Stores a value in the cache |
+| `GET` | Key | Value / `FAILURE` | Retrieves a value from the cache |
+| `SETEXPIRE` | Key, Time | `SUCCESS` / `FAILURE` | Sets an expiration time for a key |
+| `SHUTDOWN` | None | `SUCCESS` | Shuts down the server |
