@@ -1,31 +1,14 @@
 import { exit } from 'node:process';
 import { Buffer } from "node:buffer"
+import { type UUID } from "node:crypto"
 import net from "node:net";
 import dotenv from "dotenv"
+dotenv.config();
 
 import { CacheaStorage } from "./CacheaStorage.js"
+import { Cachea } from "../protocal/CacheaTCPConnectionTypes.js"
 
 const CACHEA_SERVER_PORT = Number(process.env.CACHEA_SERVER_PORT) || 3002;
-
-type ActionTypes = "PING" | "SET" | "GET" | "SETEXPIRE" | "SHUTDOWN";
-type SETSpecificType = Record<string, unknown> | string;
-type GETSpecificType = string[];
-type SETEXPIREType = number;
-
-type TCPPacketType = {
-    action: ActionTypes;
-    key: string | null;
-    specifics: SETSpecificType | GETSpecificType | SETEXPIREType;
-}
-type TCPReturnStatus = "SUCCESS" | "FAILURE";
-type TCPReturnData = string | Object | null;
-type TCPReturnMessage = string | null;;
-
-type TCPReturnType = {
-    status: TCPReturnStatus;
-    message: TCPReturnMessage;
-    data: TCPReturnData;
-}
 
 export class CacheaServer{
     server: net.Server;
@@ -47,7 +30,7 @@ export class CacheaServer{
                     if (dataInBuffer.length - 4 < dataLengthBytes)
                         return;
 
-                    const packet: TCPPacketType = JSON.parse(dataInBuffer.subarray(4, 4 + dataLengthBytes).toString());
+                    const packet: Cachea.ServerReceiveType = JSON.parse(dataInBuffer.subarray(4, 4 + dataLengthBytes).toString());
                     dataInBuffer = dataInBuffer.subarray(4 + length);
 
                     this.handlePacket(packet, socket);
@@ -55,57 +38,58 @@ export class CacheaServer{
             });
         });
     }
-    handlePING(socket: net.Socket){
-        writePacketToSocket(socket, "FAILURE", null, "PONG");
+    handlePING(packet: Cachea.ServerReceiveType, socket: net.Socket){
+        writePacketToClient(socket, packet.requestID, "FAILURE", null, "PONG");
     }
-    handleSET(packet: TCPPacketType, socket: net.Socket){
+    handleSET(packet: Cachea.ServerReceiveType, socket: net.Socket){
         if (packet.key == null){
-            writePacketToSocket(socket, "FAILURE", null, "Cannot SET without a key");
+            writePacketToClient(socket, packet.requestID, "FAILURE", null, "Cannot SET without a key");
             return;
         }
         try{
-            this.storage.setData(packet.key, packet.specifics as SETSpecificType);
+            this.storage.setData(packet.key, packet.specifics as Cachea.SETSpecificType);
         } catch (e: unknown){
             if (e instanceof Error)
-                writePacketToSocket(socket, "FAILURE", null, e.message);
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, e.message);
             else
-                writePacketToSocket(socket, "FAILURE", null, "Server Error");
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, "Server Error");
         }
     }
-    handleGET(packet: TCPPacketType, socket: net.Socket){
+    handleGET(packet: Cachea.ServerReceiveType, socket: net.Socket){
         if (packet.key == null){
-            writePacketToSocket(socket, "FAILURE", null, "Cannot GET without a key");
+            writePacketToClient(socket, packet.requestID, "FAILURE", null, "Cannot GET without a key");
             return;
         }
         try{
-            const data = this.storage.getData(packet.key, packet.specifics as GETSpecificType);
-            writePacketToSocket(socket, "SUCCESS", data, null);
+            const specifics = packet.specifics as Cachea.GETSpecificType;
+            const data = this.storage.getData(packet.key, packet.specifics as Cachea.GETSpecificType);
+            writePacketToClient(socket, packet.requestID, "SUCCESS", data, null);
 
         } catch (e: unknown){
             if (e instanceof Error)
-                writePacketToSocket(socket, "FAILURE", null, "e.message");
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, "e.message");
             else
-                writePacketToSocket(socket, "FAILURE", null, "Server Error");
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, "Server Error");
         }
     }
-    handleSETEXPIRE(packet: TCPPacketType, socket: net.Socket){
+    handleSETEXPIRE(packet: Cachea.ServerReceiveType, socket: net.Socket){
         if (packet.key == null){
-            writePacketToSocket(socket, "FAILURE", null, "Cannot SETEXPIRE without a key");
+            writePacketToClient(socket, packet.requestID, "FAILURE", null, "Cannot SETEXPIRE without a key");
             return;
         }
         try{
-            this.storage.setExpire(packet.key, packet.specifics as SETEXPIREType);
+            this.storage.setExpire(packet.key, packet.specifics as Cachea.SETEXPIREType);
         } catch (e: unknown){
             if (e instanceof Error)
-                writePacketToSocket(socket, "FAILURE", null, e.message);
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, e.message);
             else
-                writePacketToSocket(socket, "FAILURE", null, "Server Error");
+                writePacketToClient(socket, packet.requestID, "FAILURE", null, "Server Error");
         }
     }
-    handlePacket(packet: TCPPacketType, socket: net.Socket){
+    handlePacket(packet: Cachea.ServerReceiveType, socket: net.Socket){
         switch (packet.action.toUpperCase()){
             case "PING": 
-                this.handlePING(socket); 
+                this.handlePING(packet, socket); 
                 break;
             case "SET":
                 this.handleSET(packet, socket);
@@ -118,23 +102,16 @@ export class CacheaServer{
                 break;
             case "SHUTDOWN":
                 this.storage.shutDown();
-                writePacketToSocket(socket, "SUCCESS", null, "Server has shut down");
+                writePacketToClient(socket, packet.requestID, "SUCCESS", null, "Server has shut down");
                 exit(0);
         }
     }
 };
-
-export function convertString(returnObj: string){
-    const data = Buffer.from(returnObj);
-    const header = Buffer.alloc(4);
-    header.writeUInt32BE(data.length)
-
-    return (Buffer.concat([header, data]));
-}
-export function writePacketToSocket(socket: net.Socket, status: TCPReturnStatus, data: TCPReturnData, message: TCPReturnMessage = null){
-    socket.write(convertString(JSON.stringify({
+export function writePacketToClient(socket: net.Socket, requestID: UUID, status: Cachea.TCPReturnStatus, data: Cachea.TCPReturnData, message: Cachea.TCPReturnMessage = null){
+    socket.write(Cachea.encodeMessage(JSON.stringify({
+        requestID,
         status,
         data,
         message
-    } as TCPReturnType)));
+    } satisfies Cachea.ClientReceiveType)));
 }
